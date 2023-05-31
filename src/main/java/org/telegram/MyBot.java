@@ -6,10 +6,11 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
-
+import java.util.*;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendLocation;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboard;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
@@ -31,32 +32,41 @@ public class MyBot extends TelegramLongPollingBot{
     Boolean onsetDestination=false;
     Boolean onsetOrigin=false;
     SendMessage message = new SendMessage();
-    String origin="";
-    String destination="";
+
+    CallbackQuery query;
+    long chatid;
+    HashMap<Long,ArrayList<String>> userdata=new HashMap<>(500);
     @Override
     public void onUpdateReceived(Update update) {
-        if(onsetDestination)
+       // System.out.println(update.getMessage().getLocation());
+        setButtons(message);
+        chatid=update.getMessage().getChatId();
+        if(!userdata.containsKey(chatid))
         {
-            //messages following will be of these flow
-            destination=update.getMessage().getText();
-            message.setText("Destination Set as "+destination);
-            sendreply(message);
-            onsetDestination=false;
-            setResponse(origin,destination);
+             message.setText("Welcome to traffy used for identifying the traffic time for various destinations when specifying location please be as specific as possible eg Donholm,Nairobi for the best results\n Use the keyboard buttons to interact with the bot"); 
+             sendreply(message);
+            //add user chat records
+            String origin="";
+            String destination="";
+            Boolean onsetDestination=false;
+            Boolean onsetOrigin=false;
+            ArrayList<String> data=new ArrayList<String>();
+            data.add(origin);
+            data.add(destination);
+            data.add(String.valueOf(onsetDestination));
+            data.add(String.valueOf(onsetOrigin));
+            //add to hashmap
+            userdata.put(chatid, data);
         }
-        if(onsetOrigin)
-        {
-            //set the origin
-                //try to prompt user for geo locatio
-            // reset reply keyboard
-            origin=update.getMessage().getText();
-            message.setText("Origin Set as "+origin);
-            sendreply(message);
-            onsetOrigin=false;
-            SetDestination();
-        }
-        //Customize greetings 
+        else{
+            if(update.getMessage().getText().toString().equalsIgnoreCase("/start"))
+            {
+                message.setText("Welcome to traffy used for identifying the traffic time for various destinations when specifying location please be as specific as possible eg Donholm,Nairobi for the best results\n Use the keyboard buttons to interact with the bot"); 
+                userdata.get(chatid).clear();
+                sendreply(message);
+            }
         if (update.hasMessage() && update.getMessage().hasText()) {
+
       // Create a SendMessage object with mandatory fields
             message.setChatId(update.getMessage().getChatId().toString());
             //help
@@ -98,13 +108,31 @@ public class MyBot extends TelegramLongPollingBot{
                 sendreply(message);
             
             }
-           
-            setButtons(message);
-            //sendreply(message);
+            else if(Boolean.valueOf(userdata.get(chatid).get(2)))
+            {
+                //messages following will be of these flow
+                userdata.get(chatid).set(1, update.getMessage().getText());
+                message.setText("Destination Set as "+userdata.get(chatid).get(1));
+                sendreply(message);
+                userdata.get(chatid).add(2, String.valueOf(false));
+              
+                setResponse(userdata.get(chatid).get(0),  userdata.get(chatid).get(1));
+            }
+            else if(Boolean.valueOf(userdata.get(chatid).get(3)))
+            {
+                //set the origin
+                    //try to prompt user for geo locatio
+                // reset reply keyboard
+                userdata.get(chatid).set(0, update.getMessage().getText());
+                message.setText("Origin Set as "+userdata.get(chatid).get(0));
+                sendreply(message);
+                userdata.get(chatid).add(3, String.valueOf(false));
+                SetDestination();
+            }
 
         }
-        System.out.println(update.getMessage().getText());
-        
+        System.out.println(chatid+" "+update.getMessage().getText());
+    }
     }
     
     public synchronized void setButtons(SendMessage sendMessage) {
@@ -131,11 +159,6 @@ public class MyBot extends TelegramLongPollingBot{
         // Add the buttons to the third keyboard row
         keyboardThirdRow.add(new KeyboardButton("Get traffic information"));
         KeyboardRow keyboardForthRow = new KeyboardRow();
-        // Add the buttons to the third keyboard row
-        // KeyboardButton location=new KeyboardButton("Use my Location");
-        // location.getRequestLocation();
-        // keyboardForthRow.add(location);
-        // Add all of the keyboard rows to the list
         keyboard.add(keyboardFirstRow);
         keyboard.add(keyboardSecondRow);
         keyboard.add(keyboardThirdRow);
@@ -149,13 +172,13 @@ public class MyBot extends TelegramLongPollingBot{
     {
       message.setText("Enter your Origin");
       sendreply(message);
-      onsetOrigin=true;
+      userdata.get(chatid).add(3, String.valueOf(true));
     }
     public void SetDestination()
     {
       message.setText("Enter your Destination");
       sendreply(message);
-      onsetDestination=true;
+      userdata.get(chatid).add(2, String.valueOf(true));
     }
     public void setResponse(String origin,String destination)
     {
@@ -180,15 +203,17 @@ public class MyBot extends TelegramLongPollingBot{
            delay=Math.abs(delay);
            Calendar now = Calendar.getInstance();
            now.add(Calendar.SECOND, Integer.valueOf(String.valueOf(result.routes[0].legs[0].durationInTraffic.inSeconds)));
-            message.setText("Estimated travel time: " + result.routes[0].legs[0].duration.humanReadable+"\nEstimated distance in metres: " + result.routes[0].legs[0].distance.inMeters + " m"+"\nEstimated distance in Kilometres: " + result.routes[0].legs[0].distance +"\nTotal time to travel including traffic conditions : " + result.routes[0].legs[0].durationInTraffic.humanReadable+"\nEstimated traffic delay: "+ String.valueOf(delay>60?TimeUnit.SECONDS.toMinutes(delay)+" Minute(s)":delay+" seconds")+"\nEstimated Arrival time: "+ new SimpleDateFormat("HH:mm aa").format(now.getTime()));
+        message.setText("Estimated travel time: " + result.routes[0].legs[0].duration.humanReadable+"\nEstimated distance in metres: " + result.routes[0].legs[0].distance.inMeters + " m"+"\nEstimated distance in Kilometres: " + result.routes[0].legs[0].distance +"\nTotal time to travel including traffic conditions : " + result.routes[0].legs[0].durationInTraffic.humanReadable+"\nEstimated traffic delay: "+ String.valueOf(delay>60?TimeUnit.SECONDS.toMinutes(delay)+" Minute(s)":delay+" seconds")+"\nEstimated Arrival time: "+ new SimpleDateFormat("HH:mm aa").format(now.getTime()));
         
         } catch (Exception e) {
             message.setText(e.getMessage());
+            sendreply(message);
         }
         sendreply(message);
     }
     public void sendreply(SendMessage mes)
     {
+        mes.setChatId(chatid);
         try {
             if(mes!=null)
             {
@@ -196,7 +221,8 @@ public class MyBot extends TelegramLongPollingBot{
                  
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            message.setText(e.getMessage());
+            sendreply(message);
         }
     }
 }

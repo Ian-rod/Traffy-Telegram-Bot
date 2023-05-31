@@ -1,0 +1,1 @@
+Main-Class: C:\Users\Irod\Documents\Java\Springboot\bot\New folder\telegrambots\src\main\java\org\telegram\Main.java
